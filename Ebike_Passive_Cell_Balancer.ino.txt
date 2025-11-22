@@ -1,0 +1,55 @@
+// Ebike_Passive_Cell_Balancer.ino
+// 4S passive balancing prototype (Arduino UNO)
+// Reads 4 cell voltages via voltage dividers, engages bleed MOSFETs when cell > target
+
+// Analog pins for cell taps (assumes proper divider scaling)
+const int cellPins[4] = {A0, A1, A2, A3};
+// MOSFET control pins for bleed resistors
+const int bleedPins[4] = {4, 5, 6, 7};
+
+const float ADC_REF = 5.0;
+const int ADC_MAX = 1023;
+
+// Divider factors: measured voltage = adc * (scaleFactor)
+const float scaleFactor = 4.0; // example: divider scales 0-20V into 0-5V => factor = 4.0
+
+const float targetCellV = 4.05;   // target balancing threshold (Volts)
+const float hysteresis = 0.02;    // small hysteresis to prevent chattering
+
+void setup() {
+  Serial.begin(9600);
+  for (int i=0;i<4;i++){
+    pinMode(bleedPins[i], OUTPUT);
+    digitalWrite(bleedPins[i], LOW); // OFF
+  }
+  Serial.println("4S Passive Cell Balancer Ready");
+}
+
+void loop() {
+  float cellV[4];
+  for (int i=0;i<4;i++){
+    int adc = analogRead(cellPins[i]);
+    float vin = (adc * ADC_REF) / ADC_MAX;     // voltage at Arduino pin
+    cellV[i] = vin * scaleFactor;              // actual cell voltage
+  }
+
+  // Print voltages
+  Serial.print("Cells: ");
+  for (int i=0;i<4;i++){
+    Serial.print(cellV[i], 3);
+    Serial.print("V ");
+  }
+  Serial.println();
+
+  // Balancing logic: if a cell > target + hysteresis, enable bleeding until below target - hysteresis
+  for (int i=0;i<4;i++){
+    if (cellV[i] > (targetCellV + hysteresis)) {
+      digitalWrite(bleedPins[i], HIGH); // engage bleed MOSFET
+    } else if (cellV[i] < (targetCellV - hysteresis)) {
+      digitalWrite(bleedPins[i], LOW);  // stop bleeding
+    }
+    // else keep previous state (hysteresis prevents toggling)
+  }
+
+  delay(1000); // 1s sampling for prototype; tune for your pack
+}
